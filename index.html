@@ -188,7 +188,7 @@
               <span class="post-meta-item-text">发表于</span>
               
 
-              <time title="创建时间：2021-11-01 17:47:10 / 修改时间：17:48:58" itemprop="dateCreated datePublished" datetime="2021-11-01T17:47:10+08:00">2021-11-01</time>
+              <time title="创建时间：2021-11-01 17:47:10 / 修改时间：20:05:27" itemprop="dateCreated datePublished" datetime="2021-11-01T17:47:10+08:00">2021-11-01</time>
             </span>
             <span class="post-meta-item">
               <span class="post-meta-item-icon">
@@ -211,7 +211,92 @@
     <div class="post-body" itemprop="articleBody">
 
       
-          <h1 id="这是一份笔记"><a href="#这是一份笔记" class="headerlink" title="这是一份笔记"></a>这是一份笔记</h1>
+          <h1 id="这是一份笔记"><a href="#这是一份笔记" class="headerlink" title="这是一份笔记"></a>这是一份笔记</h1><h1 id="CuraEngine-源码学习笔记-一-：编译与运行"><a href="#CuraEngine-源码学习笔记-一-：编译与运行" class="headerlink" title="CuraEngine 源码学习笔记(一)：编译与运行"></a>CuraEngine 源码学习笔记(一)：编译与运行</h1><p>徐辰雨 2021.10.30</p>
+<p>[TOC]</p>
+<h2 id="1-CuraEngine-简介"><a href="#1-CuraEngine-简介" class="headerlink" title="1. CuraEngine 简介"></a>1. CuraEngine 简介</h2><p><a target="_blank" rel="noopener" href="https://github.com/Ultimaker/CuraEngine">CuraEngine</a> 是一个全部由 C++ 编写的开源命令行应用，用于生成3D打印的 G 代码。CuraEngine 使用 <a target="_blank" rel="noopener" href="http://www.angusj.com/delphi/clipper.php">clipper</a> 作为二维图形的算法库，并使用 <a target="_blank" rel="noopener" href="http://github.com/Ultimaker/libArcus">libArcus</a> 绑定 C++ 和 python3 的代码，用于 CuraEngine 与其 GUI 应用 <a href="(https://github.com/Ultimaker/Cura)">Cura</a> 之间的结构数据序列化，促进前后端通信。</p>
+<p>我所使用的代码为最新版的 CuraEngine 15.10, 以下均基于此版本进行操作。</p>
+<h2 id="2-平台准备"><a href="#2-平台准备" class="headerlink" title="2. 平台准备"></a>2. 平台准备</h2><p>考虑到CuraEngine的跨平台特性，以及在22000或更高版本[[Appendix 1: 如何查看windows版本号?]](# Appendix 1: 如何查看windows版本号?)的Windows11下，WSL2对Linux GUI应用的支持（详细信息请参考<a href="">WSLg</a>），决定在Windows平台下启用WSL2(Windows Subsystem for Linux)并安装Ubuntu 20.04 LTS分发版作为工作环境，终端采用Windows Terminal。值得注意的是，在某次更新之后，当安装Windows Terminal之后安装WSL，分发版会自动集成到Windows Terminal的下拉标签中，非常方便。</p>
+<p>上述准备完成后，应如下图所示：</p>
+<p><img src="/images/CuraEngine-%E6%BA%90%E7%A0%81%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0%EF%BC%88%E4%B8%80%EF%BC%89/image-20211101200352813.png" alt="image-20211101200352813"></p>
+<p>WSL2还可<a target="_blank" rel="noopener" href="https://docs.microsoft.com/zh-cn/windows/wsl/filesystems">跨文件系统工作</a>，因此相关项目代码可以保存在机械硬盘或非系统盘中。</p>
+<p>关于WSL及WSL2的相关信息可以查阅微软官方文档：[适用于 Linux 的 Windows 子系统文档](<a target="_blank" rel="noopener" href="https://docs.microsoft.com/zh-cn/windows/wsl/">适用于 Linux 的 Windows 子系统文档 | Microsoft Docs</a>)</p>
+<p>关于Windows termnal的使用及美化，可以查阅微软官方文档：[什么是 Windows 终端？](<a target="_blank" rel="noopener" href="https://docs.microsoft.com/zh-cn/windows/terminal/">Windows 终端概述 | Microsoft Docs</a>)</p>
+<h2 id="3-安装第三方库"><a href="#3-安装第三方库" class="headerlink" title="3. 安装第三方库"></a>3. 安装第三方库</h2><p>CuraEngine 中所使用的第三方库总结如下表：</p>
+<table>
+<thead>
+<tr>
+<th align="center">第三方库</th>
+<th align="left">功能说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="center">Protobuf</td>
+<td align="left">Google的开源库，用于Cura与CuraEngine之间的结构数据序列化，简单说就是保证两个软件之间可以互相传递结构化的数据。目前支持多种语言，这里就使用了C++，Python</td>
+</tr>
+<tr>
+<td align="center">Arcus</td>
+<td align="left">包含C++代码与Python3的绑定，基于Protobuf库在一个线程中创建一个socket，然后发送与接受结构化的消息数据</td>
+</tr>
+<tr>
+<td align="center">rapidjson</td>
+<td align="left">C++库，用于解读JSON格式的文件，CuraEngine使用它解读打印机配置参数的JSON文件</td>
+</tr>
+<tr>
+<td align="center">clipper</td>
+<td align="left">C++库，一个用于二维图形裁剪与偏移等功能的算法库，CuraEngine对模型上切出来的所有切片调用此库进行二维图形操作</td>
+</tr>
+</tbody></table>
+<p>下面逐一进行安装。</p>
+<h3 id="3-1-Protobuf"><a href="#3-1-Protobuf" class="headerlink" title="3.1 Protobuf"></a>3.1 Protobuf</h3><p>Protobuf 在 Ubuntu 上的安装可以参考其 github 主页上的引导: <a target="_blank" rel="noopener" href="https://github.com/protocolbuffers/protobuf/blob/master/src/README.md#c-installation---unix">C++ Installation - Unix</a>。我在此处进行重新记录，并指出一些需要注意的点，用于备忘和参考。</p>
+<p>从源码编译 protobuf，需要具备：autoconf，automake，libtool，make，g++，unzip，可以用以下命令安装：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sudo apt-get install autoconf automake libtool curl make g++ unzip</span><br></pre></td></tr></table></figure>
+
+<p>可以使用各命令的版本查看工具来验证是否安装成功，若有输出即证明无误：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#</span><span class="bash"> 格式： <span class="built_in">command</span> --version</span></span><br><span class="line"><span class="meta">#</span><span class="bash"> 例如，要查看g++的版本</span></span><br><span class="line"><span class="meta">~$</span><span class="bash"> g++  --version</span></span><br></pre></td></tr></table></figure>
+
+<p><strong>接下来的一步非常重要</strong>，在 <a target="_blank" rel="noopener" href="https://github.com/protocolbuffers/protobuf/releases/tag/v3.14.0">release</a> 中下载版本号为 <strong>v3.14.0</strong> 的 protobuf 源码，建议下载 <a target="_blank" rel="noopener" href="https://github.com/protocolbuffers/protobuf/releases/download/v3.14.0/protobuf-all-3.14.0.zip">protobuf-all-3.14.0.zip</a>，可以在 Windows 下下载到指定文件夹并解压，之后用 WSL 访问相关文件夹。</p>
+<p>Note：我从 protobuf v3.19.1 一直尝试到 v3.14.0，该版本的 protobuf 可以用于 CuraEngine 的编译，而高版本则会在编译时输出未找到相关库的错误，原因未知。</p>
+<p>直接下载<code> .zip</code>包不需要通过<code>./autogen.sh</code>生成配置文件，直接进入解压后的 Protubuf 文件夹并逐一执行以下命令：</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">./configure</span><br><span class="line">make	#如果处理器有多核，可采用 make -j 指定核数加快编译速度，如指定 4 核，可以使用 make -j4，下同</span><br><span class="line">make check</span><br><span class="line">sudo make install</span><br><span class="line">sudo ldconfig # refresh shared library cache.</span><br></pre></td></tr></table></figure>
+
+<p>注意，<code>make install</code> 要使用管理员权限。</p>
+<p>之后查看是否安装成功</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">~$</span><span class="bash"> protoc --version</span></span><br></pre></td></tr></table></figure>
+
+<h3 id="3-2-libArcus"><a href="#3-2-libArcus" class="headerlink" title="3.2 libArcus"></a>3.2 libArcus</h3><p>libArcus 在 Ubuntu 上的安装可以参考其 github 主页上的引导: <a target="_blank" rel="noopener" href="https://github.com/Ultimaker/libArcus">Ultimaker/libArcus: Communication library between internal components for Ultimaker software (github.com)</a>。</p>
+<p>上一步操作中已经成功安装 protobuf，我们还需确保其他工具的可用性</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sudo apt install build-essential cmake python3-dev python3-sip-dev protobuf-compiler libprotoc-dev libprotobuf-dev</span><br></pre></td></tr></table></figure>
+
+<p>在主页上的参考命令中采用了 <code>build-essentials</code>，但是该包名在我的 ubuntu 20.04 LTS 下应为 <code>build-essential</code>，可都尝试一下。</p>
+<p>将源码 git 下来或者直接在 release 中下载</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git clone https://github.com/Ultimaker/libArcus.git</span><br></pre></td></tr></table></figure>
+
+<p>进入 libArcus 文件夹，并执行</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">mkdir build &amp;&amp; cd build</span><br><span class="line">cmake ..</span><br><span class="line">make	## make -j</span><br><span class="line">sudo make install</span><br></pre></td></tr></table></figure>
+
+<h2 id="4-CuraEngine-的编译"><a href="#4-CuraEngine-的编译" class="headerlink" title="4. CuraEngine 的编译"></a>4. CuraEngine 的编译</h2><p>通过上文的一系列配置，终于可以开始 CuraEngine 的编译了。</p>
+<p>将代码从 git 下来或下载 release 版本</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">git clone https://github.com/Ultimaker/CuraEngine.git</span><br></pre></td></tr></table></figure>
+
+<p>进入文件夹并执行</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">mkdir build &amp;&amp; cd build</span><br><span class="line">cmake ..</span><br><span class="line">make	#make -j</span><br></pre></td></tr></table></figure>
+
+<p>如果需要生成 IDE 的工程文件，如 Code::Blocks，可以使用</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">cmake  .  -G  &quot;CodeBlocks - Unix Makefile&quot;</span><br></pre></td></tr></table></figure>
+
+<p>至此，CuraEngine 就已经编译成功了，可以在 build 目录下使用命令查看帮助</p>
+<figure class="highlight shell"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">./CuraEngine help</span><br></pre></td></tr></table></figure>
+
+<p>应该输出如下结果</p>
+<p><img src="/images/CuraEngine-%E6%BA%90%E7%A0%81%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0%EF%BC%88%E4%B8%80%EF%BC%89/image-20211101200456059.png" alt="image-20211101200456059"></p>
+<p>该程序目前无法运行，需要 <code>.stl</code> 模型文件及<code>.json</code>打印机配置文件才可以执行相关命令，生成 Gcode。</p>
+<h2 id="5-借助-Cura-中的配置文件进行测试"><a href="#5-借助-Cura-中的配置文件进行测试" class="headerlink" title="5. 借助 Cura 中的配置文件进行测试"></a>5. 借助 Cura 中的配置文件进行测试</h2><p>（暂略）</p>
+<h2 id="Appendix-1-如何查看windows版本号"><a href="#Appendix-1-如何查看windows版本号" class="headerlink" title="Appendix 1: 如何查看windows版本号?"></a>Appendix 1: 如何查看windows版本号?</h2><p>此处提供一个我认为最为便捷的方法：</p>
+<p>使用 <code>win+R</code> 快捷键，打开运行窗口，并输入 <code>winver</code>，回车执行</p>
+<p><img src="/images/CuraEngine-%E6%BA%90%E7%A0%81%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0%EF%BC%88%E4%B8%80%EF%BC%89/image-20211101200507535.png" alt="image-20211101200507535"></p>
+<p>弹出如下窗口：</p>
+<p><img src="/images/CuraEngine-%E6%BA%90%E7%A0%81%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0%EF%BC%88%E4%B8%80%EF%BC%89/image-20211101200514633.png" alt="image-20211101200514633"></p>
+
       
     </div>
 
